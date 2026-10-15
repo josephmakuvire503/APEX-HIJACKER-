@@ -1,0 +1,124 @@
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason
+} = require("@whiskeysockets/baileys");
+
+const pino = require("pino");
+
+const {
+  BOT_NAME,
+  VERSION,
+  PREFIX,
+  createMenu,
+  handleCommand
+} = require("./index.js");
+
+async function startBot() {
+  const { state, saveCreds } =
+    await useMultiFileAuthState("session");
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: false,
+    browser: ["APEX HIJACKER", "Chrome", "1.0.0"]
+  });
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect } = update;
+
+    if (connection === "connecting") {
+      console.log("APEX HIJACKER connecting...");
+    }
+
+    if (connection === "open") {
+      console.log(`${BOT_NAME} connected successfully!`);
+    }
+
+    if (connection === "close") {
+      const statusCode =
+        lastDisconnect?.error?.output?.statusCode;
+
+      if (statusCode !== DisconnectReason.loggedOut) {
+        console.log("Connection closed. Reconnecting...");
+        setTimeout(startBot, 3000);
+      } else {
+        console.log(
+          "WhatsApp logged out. Reconnect the account."
+        );
+      }
+    }
+  });
+
+  if (!state.creds.registered) {
+    console.log(
+      "Pairing is required. Use a private terminal to connect WhatsApp."
+    );
+    console.log(
+      "Do not publish authentication credentials."
+    );
+  }
+
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    for (const msg of messages) {
+      try {
+        if (!msg.message || msg.key.fromMe) continue;
+
+        const jid = msg.key.remoteJid;
+
+        if (!jid || jid === "status@broadcast") continue;
+
+        const message =
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
+          msg.message.imageMessage?.caption ||
+          msg.message.videoMessage?.caption ||
+          "";
+
+        const text = message.trim();
+
+        if (!text.startsWith(PREFIX)) continue;
+
+        const started = Date.now();
+        const parts = text.slice(PREFIX.length)
+          .trim()
+          .split(/\s+/);
+
+        const command = "." + (parts.shift() || "")
+          .toLowerCase();
+
+        let reply = handleCommand(command);
+
+        if (command === ".ping") {
+          reply = `🏓 PONG!\n⚡ Response: ${
+            Date.now() - started
+          } ms`;
+        }
+
+        if (command === ".alive") {
+          reply =
+            `✅ ${BOT_NAME} is online!\n` +
+            `📦 Version: ${VERSION}\n` +
+            `⚡ Response: ${Date.now() - started} ms`;
+        }
+
+        if (!reply) continue;
+
+        await sock.sendMessage(
+          jid,
+          { text: reply },
+          { quoted: msg }
+        );
+      } catch (error) {
+        console.error("Message error:", error.message);
+      }
+    }
+  });
+}
+
+startBot().catch((error) => {
+  console.error("Bot startup failed:", error);
+});
