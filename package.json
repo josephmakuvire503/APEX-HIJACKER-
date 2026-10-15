@@ -1,0 +1,16 @@
+{
+"name": "apex-hijacker",
+"version": "1.0.0",
+"description": "APEX HIJACKER WhatsApp Bot - Powered by CYBER MAN",
+"main": "bot.js",
+"scripts": {
+"start": "node bot.js"
+},
+"engines": {
+"node": ">=20"
+},
+"dependencies": {
+"@whiskeysockets/baileys": "^6.7.18",
+"pino": "^9.6.0"
+}
+}
